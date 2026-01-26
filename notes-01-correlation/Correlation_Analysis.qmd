@@ -1,0 +1,388 @@
+---
+title: "Correlation Analysis"
+author: "Alana Unfried"
+format: 
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(echo = TRUE, comment = "") #if your .qmd does not render, add ', error=TRUE' after the last " in this code
+
+#the setup chunk is where you load packages that you will use for the rest of the document
+
+#mosaic package makes some functions more user-friendly for Intro Stat topics
+library(mosaic)
+
+#ggformula package is for graphics
+library(ggformula)
+
+
+#tidyverse includes other packages that are useful
+library(tidyverse)
+
+#advanced graphics
+library(ggplot2)
+library(GGally)
+
+#Palmer Penguins data
+library(palmerpenguins)
+
+#janitor package to clean variable names
+library(janitor)
+```
+
+There is no output to the setup code chunk except some information about what functions are taking priority to functions with similar names in other packages; it just loads the packages we need to use. You can tell it worked by the green flashes on the side; if a `library()` function doesn't work, there will be a red color on the side and an error output.  
+
+**Make sure you have started by opening the .Rproj file! If you do NOT see the name of this R project in the top right corner of RStudio, close this .qmd file and open the .Rproj first. It should say "notes-01-correlation", the name of the project.Editing the .qmd file outside of the .Rproj can cause syncing issues and loss of work on the Cal-ICOR RStudio Server.**
+
+
+
+# Reading in data
+R comes with many data sets already stored in its library.  `iris` is one of those data sets. We can use the function `data()` to read the data into R. R cannot analyze data unless you read the data into the program. Place your cursor after the line of code below and press `Ctrl+Enter` to run that line of code.
+
+```{r}
+#| label: iris
+data(iris)
+```
+
+You will notice that the line executes in the Console, but no output is returned. That is okay -- we only wanted read the data into R at this point. Think of it like pulling a binder of data off the shelf. You haven't done anything yet, just retrieved it. If you look to the Environment Pane to the right, you should see the data has appeared as retrieved.
+
+We can also read in data from an R package. The `palmerpenguins` R package contains a dataset on three different species of penguins. We have already loaded the package and can now read in the data.
+
+```{r}
+#| label: read penguins
+
+data("penguins")
+
+#drop rows with missing values
+penguins_clean <- penguins |>
+  drop_na() |>
+  clean_names()
+
+```
+
+
+For data that is not already stored in a R library, we must read in the data using a function that identifies the file type, location, and potentially some other characteristics of the data file. 
+
+Run the code below to read in the data file called "bac.csv" and call it body. A CSV file stands for Comma Separated Values. When saved, it uses a comma to indicate separate values. Once we read in and name a data set in R, we call it a **dataframe**.
+
+
+```{r}
+#| label: beer
+beer <- read_csv("data/bac.csv")
+
+#prints first 6 rows
+head(beer) 
+
+#prints a list of the variables and example responses
+glimpse(beer)
+```
+
+
+Notice that each time you load in a data set, it appears with a brief description under the Environment Tab under Data (top right pane). You can click on the grid icon next to the data file to view the dataframe. Look at the `beer` data. Notice there are two columns - these are our variables. Each row represents an individual. Each cell contains a single value. This is called *tidy data*.  
+
+
+
+# Exploratory Data Analysis
+The first step in analysis will always be to produce descriptive statistics and graphics. Especially as we get into multivariate analysis, we will need to gain intuition for our data through visualization and aggregation of summary statistics. 
+
+
+## Descriptive Statistics
+Consider the `palmerpenguins` data set. What are some appropriate summary statistics we could calculate?
+
+```{r}
+#| label: stats_penguins
+mean(~bill_length_mm, data = penguins_clean) #what does this code do? <insert your answer>
+
+mean(bill_length_mm ~ species, data = penguins_clean) #what does this code do?
+
+df_stats(~bill_length_mm, data = penguins_clean) #what does this code do?
+
+df_stats(bill_length_mm ~ species, data = penguins_clean) #what does this code do?
+
+tally(~species, data = penguins_clean) #what does this code do? 
+```
+
+
+## Graphics
+We can make a myriad of plots in R depending on the type of data we have - here are a few types of plots. 
+
+*Note that if you have learned `ggplot` in another course, you are welcome to use ggplot syntax to create your plots for this course.* 
+
+```{r}
+#| label: ex_plots_penguins
+gf_histogram(~bill_length_mm, data = penguins_clean,
+             binwidth = 1)
+
+gf_boxplot(bill_length_mm ~ species, data = penguins_clean)
+
+gf_bar(~species, data = penguins_clean)
+
+```
+For what variable types and analysis would each plot be most appropriate? 
+
+> Answer
+
+### Scatterplots
+
+For model building, we will use a lot of Scatterplots, here is the plot from your notes for the BAC vs. # of beers data. 
+
+```{r}
+#| label: plot_beer
+#plot order is y ~ x
+#add titles, axis labels, and custom ranges for x and y
+gf_point(BAC ~ Beers, data = beer, 
+         title = "Beer vs BAC", 
+         xlab = "Number of Beers", 
+         ylab = "Blood Alcohol Content",
+         xlim = c(0,10),
+         ylim = c(0,0.20))
+```
+
+What does each modification in the code do to the plot?
+
+> Answer
+
+
+We have to tell our document what text is code and what text is just text. One way we can distinguish code in an .Rmd file is to put it in a **code chunk**. Within a code chunk, which is set apart by a line of ` ```{r} ` to begin and a line of ` ``` ` to end, every line is read as executable R code.
+
+For Windows OS- the key combination Ctrl+Alt+I creates a new code chunk (for Mac OS Cmd+Alt+I). You could instead use the green "Insert" button in the RMarkdown pane menu bar and select R to create a new code chunk. Insert a code chunk, name it, and create a scatterplot for Bill Length vs. Bill Depth for `palmerpenguins` data.
+
+<insert code chunk here>   
+
+
+
+Look at your correlation notes at the Penguin scatterplot - can you modify your plot above to color each point by species type? Edit your code! 
+
+
+
+## Correlation
+Correlation on its own is just a statistics. Here is how we can calculate it: 
+
+```{r}
+#| label: beer_cor
+#calculate basic correlation
+cor(Beers ~ BAC, data = beer)
+cor(BAC ~ Beers, data = beer)
+```
+
+
+Add a code chunk and try to calculate some correlation values for the `penguins` data.  
+
+<insert code chunk>  
+
+
+
+
+# Inference - Correlation Analysis
+Finally, we have the hypothesis test for correlation analysis.  We can write symbols in our document like so for our BAC vs Number of Beers example:   
+
+$H_0: \rho = 0$  
+
+
+$H_1: \rho \neq 0$  
+
+
+
+Write out the null and alternative above - remember to include
+
+- Population of Interest  
+- Variables of Interest with units  
+- Parameter of Interest  
+- Direction and Type of Relationship  
+
+
+Here is the code to run the test - can you modify it to test if correlation is positive?
+
+```{r}
+#| label: beer_test
+#Hypothesis test for correlation
+cor.test(Beers ~ BAC, data = beer, alternative = "two.sided")
+```
+
+
+
+Interpret the p-value in the context of the problem.  
+
+>Insert Answer Here  
+
+
+Evaluate the strenght of evidence against the null hypothesis.  
+
+>Insert Answer Here  
+
+
+
+
+In some cases we just want a confidence interval. Adjust the code below to get a 99% confidence interval for correlation. How does the interval change?  
+
+```{r}
+#| label: beer_interval
+#produces only the interval
+cor.test(Beers ~ BAC, data = beer, conf.level = 0.95)$conf.int
+```
+
+Interpret the results of the 98% confidence interval.  
+
+>Insert Answer Here  
+
+
+
+
+## Correlation Matrices
+Finally, let's construct a correlation matrix. First, read in the data:
+
+```{r}
+#| label: cigs
+#read in the data
+cigs <- read_csv("data/cigarettes.csv")
+```
+
+Here we can look at the structure of the data so which columns are 'character' and which are 'double' or 'numeric'.  
+
+```{r}
+#| eval: false
+#Gives the *structure (STR)* of the data (very useful to check for new datasets)
+# added eval = FALSE since you may not to include this code in your final knit
+str(cigs) 
+```
+
+
+
+Depending on your level of comfort with R, you could use the `tidyverse` method for calculating the correlation matrix
+
+```{r}
+#| label: tidy_matrix
+#calculate a correlation matrix
+cigs |> 
+  select(Tar, Nicotine, Weight, CO) |> 
+  cor()
+
+#what is the difference with the code above?
+cigs |> 
+  select(-Brand) |> 
+  cor()
+```
+
+
+Or you might use the `base` R approach:
+```{r}
+#| label: base_matrix
+#note the syntax: the square brackets indicate we are going to reference (rows, columns) of the data frame. We want to include all rows, so we do not list any rows and only list the specific columns that we want to calculate correlations for
+cor(cigs[,2:5])  
+#how did I know to subset just columns 2:5?
+
+#we could also reference the columns specifically
+cor(cigs[c(2,3,4,5)])
+
+```
+
+Either way is fine, it is up to you.  
+
+Describe the relationships between each variable:  
+
+>Insert Answer Here  
+
+
+
+
+### Scatterplot Matrix
+
+You can make a matrix of scatterplots using `pairs()`. Again, you can use `base` R or a `tidyverse` approach.  
+```{r}
+#| label: scatter_matrix
+#creates a matrix of scatterplots
+pairs(cigs[,2:5])  
+
+
+cigs |> 
+  select(-Brand) |> 
+  pairs()
+```
+
+
+We can also use the function `ggpairs()` from the package `GGally` which we loaded at the beginning of our document. 
+
+If we do not have a grouping variable, the code is simple:  
+```{r}
+#| label: ggpairs_no_group
+#| message: false
+
+ggpairs(cigs, columns = 2:5)
+#note the lack of labels - these graphs are for exploration, not publication. We would need axis labels for publication!
+```
+
+
+If we have a grouping variable, we can add an aesthetic of color or shape to the graph (color is usually better).  Here is an example with the Iris data.
+```{r}
+#| label: ggpairs_groups
+#| message: false
+
+
+ggpairs(iris, columns = 1:4, mapping = aes(color = Species)) +
+  scale_color_viridis_d() + #colorblind friendly color
+  scale_fill_viridis_d() + #colorblind friendly color
+  theme_light() #changes look of plot
+```
+
+
+
+
+
+
+
+# YOUR TURN
+Continue to analyze the penguins data set below.
+
+
+### Visualize and Summarize
+Create a correlation matrix and scatterplot matrix for the penguin data.  
+
+
+
+
+### Run a Test
+Test if there a statistically significant correlation between Bill Length vs. Bill Depth.  Write a hypothesis test conclusion.
+
+
+> Answer
+
+
+
+### Caclculate a Confidence Interval
+Pick two other variables, estimate the correlation between them.  Calculate a confidence interval and write a sentence interpretation.
+
+
+### What can you conclude?
+What do you include about the relationship between penguins? 
+
+> Answer
+
+
+### Future work
+Is there anything further you would want to explore about Bill Length vs Bill Depth that the correlation test did not capture? How might the fact that there are different species in your data impact your results? How could you modify your analysis to account for that impact?  
+
+
+> Answer
+
+
+
+
+
+#### Rendering
+
+The file you have been adding code to is called an Quato (qmd) file. The amazing thing about this file is that it can be "rendered" into a different type of document that contains both code and output. At the top of the pane, press "Render" and see what happens! If you get an error that you don't have time to fix, add `, error=TRUE` (again, without the ` `) to the end of the code inside the parentheses in the very first code chunk.
+
+(If you have extra time click the gear icon at the top of the pane and click "Preview in Viewer Pane". Knit the document again -- what changed? You can choose which way you prefer to view your rendered html documents in your own server!)
+
+
+
+
