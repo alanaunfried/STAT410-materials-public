@@ -1,0 +1,225 @@
+---
+title: 'Notes 02: Simple Linear Regression'
+subtitle: 'BAC and Beers'
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+
+---
+
+```{r}
+#| label: setup
+#| include: false
+#| message: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", fig.width = 6.5)
+#mosaic package makes some functions more user-friendly for Intro Stat topics
+library(mosaic)
+#ggformula package is for graphics
+library(ggformula)
+
+#janitor package will help us clean up variable names
+library(janitor)
+
+#tidyverse provides from data management tools
+library(tidyverse)
+
+#sets theme for all plots
+theme_set(theme_light())
+```
+
+
+## Blood Alcohol Level Model
+
+```{r}
+#| label: data_beer
+beer <- read_csv("beer.csv")
+
+#clean up the variable names. We will use all lower case, and what is called snake_case for clean code, which will add an underscore between any words in a variable name. 
+#the clean_names function comes from the janitor package. 
+beer <- beer |> 
+  clean_names()
+
+str(beer)
+```
+
+Create the scatterplot with x and y in the correct order. 
+```{r}
+#| label: scatter_beer
+#add titles, axis labels, and custom ranges for x and y
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)")
+```
+
+
+### Fitting the Model
+```{r}
+#| label: model_beer
+#lm stands for linear model and conducts the regression analysis
+model <- lm(bac ~ beers, data = beer)
+#extract coefficients (slope/intercept) for the model
+coef(model)
+```
+
+
+```{r}
+#| label: plot_model_na
+#plot with the regression line
+# |> is called a "pipe." Think about it as the word "then." Create the scatterplot, THEN add on the regression line 
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)") |> 
+  gf_lm()
+```
+
+
+We can also add some modifications to our plot line if we want:
+```{r}
+#| label: plot_model_mod
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)") |> 
+  gf_lm(color = "red", size = 1.2, linetype = 1) #you don't need to add anything inside, these are just line modifiers
+```
+
+
+### Assess the Model Fit
+
+Hypothesis Testing and $R^2$ to identify fit of model:
+
+t-test and R-squared
+```{r}
+#| label: t_test_beer
+#t-tests and parameter estimates
+summary(model)
+```
+
+Here is code to extract a confidence interval for the SLOPE of a given explanatory variable
+```{r}
+#| label: conf_int_beer
+confint(model, parm = "beers", level = 0.95)
+```
+
+ANOVA
+```{r}
+#| label: anova_beer
+#ANOVA table for the simple linear regression
+anova(model)
+```
+
+#### Conditions to use Least Squares Regression Modeling
+```{r}
+#| label: shapiro
+#Test for normality of residuals
+shapiro.test(residuals(model))
+```
+
+```{r}
+#| label: qqplot
+#get just the QQ plot
+plot(model, 2)
+gf_qq(~residuals(model),
+      xlab = "Theoretical Z-Scores",
+      ylab = "Residuals for Model",
+      title = "Beer vs. BAC QQ Plot") |> 
+  gf_qqline()
+```
+
+
+```{r}
+#| label: resid_fitted_plot
+#Residuals vs. Fitted plot
+plot(model, 1, add.smooth = FALSE)
+
+gf_point(residuals(model) ~ fitted.values(model),
+         xlab = "Predicted BAC from Model",
+         ylab = "Residuals for Model",
+         title = "Residual vs. Fitted Plot for BAC vs. Beer") |> 
+  gf_hline(yintercept = 0, size = 1)
+```
+
+```{r}
+#| label: cooks_plot
+#Cook's Distance
+plot(model, 5, add.smooth = FALSE)
+```
+
+
+### Use the Model: Confidence and Prediction Intervals
+
+We can create a new data frame to contain the values for x we want to estimate a response value and interval, be sure to name the variable the same name as in the original model.
+```{r}
+#| label: new_data
+new_beer <- data.frame(beers = c(7, 15))
+```
+
+Then we can specify either a confidence interval for those predictions
+```{r}
+#| label: ci_est
+predict(model, interval = "confidence", newdata = new_beer, level = 0.95)
+```
+
+Or a prediction interval
+```{r}
+#| label: pi_est
+predict(model, interval = "prediction", newdata = new_beer, level = 0.95)
+```
+
+
+
+Here is the code to create a plot with confidence intervals for the model
+```{r}
+#| label: ci_plot
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)") |> 
+  gf_lm(color = "red", size = 1.2, linetype = 1, 
+        interval = "confidence", level = 0.95,   #Add the confidence interval bands to the scatterplot
+        alpha = 0.5, fill = "grey") 
+```
+
+
+Why does the confidence interval get wider near the edges of the scatterplot?
+
+> ANSWER
+
+
+Here is a graph with the prediction interval
+```{r}
+#| label: pi_plot
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)") |> 
+  gf_lm(color = "red", size = 1.2, linetype = 1, 
+        interval = "prediction", level = 0.95,  #Add the prediction interval bands to the scatterplot
+        alpha = 0.25, fill = "lightgrey")
+```
+
+
+
+Here is a graph with both: 
+```{r}
+#| label: both_ci_pi_plot
+gf_point(bac ~ beers, data = beer, 
+         title = "Relationship between Beer Consumption and Blood Alcohol Content", 
+         xlab = "Number of Beers Consumed by College Students", 
+         ylab = "Blood Alcohol Content (% BAC)") |> 
+  gf_lm(color = "red", size = 1.2, linetype = 1, 
+        interval = "confidence", level = 0.95,   #Add the confidence interval bands to the scatterplot
+        alpha = 0.5, fill = "grey") |> 
+  gf_lm(color = "red", size = 1.2, linetype = 1, 
+        interval = "prediction", level = 0.95,
+        alpha = 0.25, fill = "lightgrey")
+```
+
+
+Why is the prediction interval wider than the confidence interval?

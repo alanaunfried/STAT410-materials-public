@@ -1,0 +1,149 @@
+---
+title: "Notes 2: Simple Linear Regression"
+subtitle: "Cigarettes"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+<!-- #word doc instead? -->
+<!-- format: -->
+<!--   docx: -->
+<!--     embed-resources: true -->
+
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+
+#mosaic package makes some functions more user-friendly for Intro Stat topics
+library(mosaic)
+#ggformula package is for graphics
+library(ggformula)
+
+#janitor package will help us clean up variable names
+library(janitor)
+
+#allows us to clean up our data more easily
+library(tidyverse)
+```
+
+
+
+## Simple Linear Regression Model for CO Output of Cigarettes
+```{r}
+cigs<-read_csv("cigarettes.csv")
+
+cigs <- cigs |>
+  clean_names()
+
+str(cigs)
+```
+
+### Exploratory Data Analysis
+Let's determine a model to predict Carbon Monoxide based on Tar Content
+
+```{r}
+
+gf_point(co~tar, data=cigs, xlab="Tar (mg) Content of Cigarettes", ylab="Carbon Monoxide Output (mg)") |>
+  gf_lm()
+
+model_tar<-lm(co~tar, data=cigs)
+
+```
+
+
+### Assess Model Fit
+```{r}
+plot(model_tar, 1)  #Residual Plot
+plot(model_tar,2)  #QQ Plot
+plot(model_tar,5)  #Cook's Distance
+```
+
+
+We have constructed a model to estimate the parameters associated with the model:  
+
+$$y_{CO} = \beta_0 + \beta_1x_{tar}$$
+
+
+We can test the following hypothesis:
+
+>$H_0: \beta_1 = 0$  
+>The slope of the linear model between CO and Tar is equal to zero (no linear relationship)  
+
+>$H_1: \beta_1 \neq 0$  
+>The slope of the linear model between CO and Tar is not equal to zero (there is a linear relationship)
+
+
+
+```{r}
+anova(model_tar)
+```
+
+
+```{r}
+summary(model_tar)
+``` 
+
+
+Here are some tips for writing output in line with the code for regression.  The intercept of the model is `r coef(model_tar)[1]` and the slope is `r coef(model_tar)[2]`.  The proportion of variability of CO output explained by the linear model with Tar is `r summary(model_tar)$r.squared` 
+
+The probability of observing a t-value of `r summary(model_tar)$coefficients[2,3]` or more extreme is `r summary(model_tar)$coefficients[2,4]` assuming the null hypothesis is true and the slope is zero.
+
+
+```{r}
+confint(model_tar,"tar", level=0.95)
+```
+
+```{r}
+predict(model_tar,interval="confidence",newdata=data.frame(tar=33))
+predict(model_tar,interval="predict",newdata=data.frame(tar=33))
+```
+
+
+## Evaluating the Influence of an Outlier
+In your analysis of the co~tar model, you may have notice an outlier.  The outlier is from observation on row 3 (how do I know this?).
+
+```{r}
+#print row 3 of the dataset
+cigs[3,]
+```
+
+We can obverse how that data point influences our model by removing it from the data set and observing our fit and assessment of fit.  Note, this does not mean we get to ignore the outlier - the purpose is exploratory analysis.  
+
+```{r}
+cigs_new<-cigs[-3,] #this removes row 3 from the data set
+```
+
+We can also filter out outliers using the `tidyverse`
+
+```{r}
+#| eval: false
+cigs |> 
+  filter(tar != 29.8)
+
+cigs |> 
+  filter(tar < 29)
+```
+
+
+Use the data set without the outlier to rerun the fit and assessment of the model.  What changes? What stays the same (or at least leads to similar conclusions)?
+
+
+
+
+
+## Simple Linear Regression - Weight  
+Now we want to build a model for CO output based on the weight (g) of the cigarette.
+
+
+
+
+
+
+
