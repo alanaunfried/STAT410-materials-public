@@ -1,0 +1,211 @@
+---
+title: "Multiple Regression Examples - MEANS"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", message = FALSE, warning = FALSE)
+
+#mosaic package makes some functions more user-friendly for Intro Stat topics
+library(mosaic)
+
+#ggformula package is for graphics
+library(ggformula)
+
+#janitor package will help us clean up variable names
+library(janitor)
+
+#car package for VIF calculations
+library(car)
+
+#general data cleaning and management
+library(tidyverse)
+
+#dataset
+library(palmerpenguins)
+
+#for parallel slopes model
+library(moderndive)
+
+
+theme_set(theme_light())
+```
+
+
+## Read Data
+
+First, let's create the summary statistics and graphics for our comparison.
+```{r}
+#from the palmerpenguins package
+data(penguins)
+str(penguins)
+
+#names are already clean, don't technically need this
+penguins <- penguins |>
+  clean_names()
+```
+
+Note that `species` is recorded as a Factor variable (categorical variable with a set number of levels). This means that R will recognize `species` as categorical automatically.
+
+## Exploratory Data Analysis
+
+
+```{r}
+
+#boxplot of bill length for each species
+gf_boxplot(bill_length_mm ~ species, data = penguins,
+           ylab = "Bill Length (mm)",
+           xlab = "Penguin Species")
+```
+
+
+
+```{r}
+#R already know that Species is categorical because of how it is saved. If you need to specify that a variable be treated as categorical, you can use "factor" as seen below:
+gf_boxplot(bill_length_mm ~ factor(species), data = penguins,
+           ylab = "Bill Length (mm)",
+           xlab = "Penguin Species")
+```
+
+
+```{r}
+#summary stats
+df_stats(bill_length_mm ~ species, data = penguins)
+mean(bill_length_mm ~ species, data = penguins, na.rm = TRUE)
+sd(bill_length_mm ~ species, data = penguins, na.rm = TRUE)
+
+```
+
+## Model
+
+
+First, let's just compare the Bill Length among the three species.  Exactly what comparisons are being made with this model?  Have we done all pairwise comparisons?
+```{r}
+#create model
+model_bill <- lm(bill_length_mm ~ factor(species), data = penguins)
+
+#output coefficients
+coef(model_bill)
+```
+
+## Inference
+
+
+```{r}
+#Hypothesis Test
+summary(model_bill)
+
+```
+
+## Change Reference Level
+
+How do we change the reference level if we want to, so that the default is not alphabetical order? Here are two options. Choose which one you like better!
+
+Option 1:
+```{r}
+
+#remember you only NEED to include the factor function if your variable is not already classified as categorical in R. 
+#If you want to reorder the levels to change the reference, this can be done within the factor function
+#within the factor function, you must list the order that you want all the levels to have. This gives you the most control over the order 
+
+penguins <- penguins |> 
+  mutate(species = factor(species, 
+                          levels = c("Gentoo", "Adelie", "Chinstrap")))
+
+model_bill_rl <- lm(bill_length_mm ~ factor(species), 
+                    data = penguins)
+coef(model_bill_rl)
+```
+
+Option 2:
+```{r}
+
+
+#alternatively, you can use the "relevel" function to just specify the reference level
+#you might need to use the factor function in addition to relevel if the variable is recorded as numerical
+#Change the reference level
+
+penguins$species <- relevel(penguins$species, ref = "Gentoo")
+
+
+model_bill_rl <- lm(bill_length_mm ~ relevel(species, ref = "Gentoo"), data = penguins)
+coef(model_bill_rl)
+```
+
+## CI
+
+
+Create confidence intervals for the predicted population mean
+```{r}
+predict(model_bill, interval = "confidence", newdata = data.frame(species = "Chinstrap"))
+```
+
+## Assumptions
+
+```{r}
+plot(model_bill_rl, 1)
+plot(model_bill_rl, 2)
+plot(model_bill_rl, 5)
+```
+
+
+## Larger MLR
+
+Let's observe larger models for Bill Length.  
+
+
+```{r}
+model_2 <- lm(bill_length_mm ~ factor(species) + bill_depth_mm, data = penguins)
+coef(model_2)
+
+vif(model_2)
+```
+
+
+Create the graph with parallel slopes from the ModernDive package function
+```{r}
+
+gf_point(bill_length_mm ~ bill_depth_mm, data = penguins,
+         color = ~factor(species)) +
+  geom_parallel_slopes(se = FALSE) +
+  scale_color_viridis_d(end = 0.85) +
+  labs(x = "Bill Depth (mm)",
+       y = "Bill Length (mm)",
+       color = "Species of Penguin")
+```
+
+Or, graph the regression lines with parallel lines by extracting the coefficients from the model.
+
+```{r}
+#to create a plot with three parallel lines, we have to do a bit calculations to get the predicted values with the same slope and then plot those lines.
+penguins_predict <- penguins |> 
+  drop_na(species, bill_length_mm, bill_depth_mm) |> 
+  mutate(predicted_bill_length = predict(model_2))
+
+
+gf_point(bill_length_mm ~ bill_depth_mm, data = penguins_predict,
+         color = ~factor(species)) |> 
+  gf_line(predicted_bill_length ~ bill_depth_mm) +
+  scale_color_viridis_d(end = 0.85) +
+  labs(x = "Bill Depth (mm)",
+       y = "Bill Length (mm)",
+       color = "Species of Penguin")
+```
+
+Another model
+
+```{r}
+model_3 <- lm(bill_length_mm ~ factor(species) + bill_depth_mm + flipper_length_mm + body_mass_g,
+              data = penguins)
+coef(model_3)
+vif(model_3)
+```
+

@@ -1,0 +1,284 @@
+---
+title: 'Notes 03: Multiple Linear Regression'
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, 
+                      comment = "", 
+                      message = FALSE, 
+                      warning = FALSE)
+
+#mosaic package makes some functions more user-friendly for Intro Stat topics
+library(mosaic)
+
+#ggformula package is for graphics
+library(ggformula)
+
+#janitor package will help us clean up variable names
+library(janitor)
+
+#for other data management 
+library(tidyverse)
+
+#for scatterplot matrix
+library(lattice) 
+
+#for VIF calculation
+library(car) 
+
+#for parallel slopes graph
+library(moderndive)
+
+#customize graph theme for full document
+theme_set(theme_light())
+```
+
+
+## Cigarette Example
+Recall from our correlation analysis for the cigarette data, that we observed the correlations between all variables:
+```{r}
+#| label: data
+cigs <- read_csv("cigarettes.csv")
+
+#clean up variable names
+cigs <- cigs |>
+  clean_names()
+```
+
+```{r}
+#| label: corr
+#look a scatterplots and correlations between variables
+cor(cigs[,2:5])
+pairs(cigs[,2:5])
+```
+
+We can also use the library `lattice` to create the scatterplots.
+```{r}
+#| label: lattice
+#Putting "lattice::" before the function name just directly references which package the function is a part of
+lattice::splom(cigs[,2:5])
+```
+
+
+Suppose we were to construct a model with all variables for CO output.
+```{r}
+#| label: model
+#construct the model
+cig_mod <- lm(co ~ tar + nicotine + weight, data = cigs)
+
+#output coefficients
+coef(cig_mod)
+```
+
+
+We then evaluate the model:
+```{r}
+#| label: tests
+#remember both the F and t-test results are included in this output
+summary(cig_mod)
+```
+Despite the strong relationship between Nicotine and CO, we do not find the variable to be a statistically significant predictor given the other variables in the model.
+
+Why is this?
+
+
+
+
+Let's observe the the Variance Inflation Factor associated with our model.  You will need the package `car` to calculate the VIF
+
+```{r}
+#| label: vif
+#vif function comes from the "car" package that we loaded at the top
+vif(cig_mod)
+vif(cig_mod) > 10
+```
+
+```{r}
+#| label: assumptions
+#create diagnostic plots for assumptions
+plot(cig_mod, 1, add.smooth = FALSE)
+plot(cig_mod, 2)
+plot(cig_mod, 5, add.smooth = FALSE)
+```
+
+
+Notice that Tar and Nicotine both have a very high VIF associated with them, indicating that they are most likely collinear.  Here is how the VIF is calculated
+
+```{r}
+#| label: vif_calc
+#CO is not involved, find the R^2 associated with a model for Nicotine
+nic_mod <- lm(nicotine ~ weight + tar, data = cigs) 
+
+#extracts the NOT adjusted R^2
+(nicr_2 <- summary(nic_mod)$r.squared)
+
+#calculates the VIF for nicotine
+nic_vif <- 1/(1 - nicr_2) 
+nic_vif
+
+```
+So we cannot include both Nicotine and Tar in our model - how do we choose which to include?  Based on the model output, which model would you choose?
+```{r}
+#| label: model_nic
+#linear model including nicotine
+cig_mod_nic <- lm(co ~ nicotine + weight, data = cigs)
+summary(cig_mod_nic)
+
+#diagnostic plots
+plot(cig_mod_nic, 1, add.smooth = FALSE)
+plot(cig_mod_nic, 2)
+plot(cig_mod_nic, 5, add.smooth = FALSE)
+```
+
+```{r}
+#| label: model_tar
+#linear model including tar
+cig_mod_tar <- lm(co ~ tar + weight, data = cigs)
+summary(cig_mod_tar)
+
+#diagnostic plots
+plot(cig_mod_tar, 1, add.smooth = FALSE)
+plot(cig_mod_tar, 2)
+plot(cig_mod_tar, 5, add.smooth = FALSE)
+```
+
+## Height and Weight by Sex
+
+Let's observed how we might include a categorical variable in our model.
+```{r}
+#| label: davis_data
+data(Davis) #found in the car package
+
+#clean names
+davis <- Davis |>
+  clean_names()
+
+#Just view the first couple of rows of data
+head(davis) 
+
+#variable information
+str(davis)
+```
+
+
+We can observe the relationship between height and weight for the students using a plot, but does that provide all the information we need?  Also, what do you notice from the plot?
+
+```{r}
+#| label: davis_scat
+#not including sex in the model
+gf_point(weight ~ height, data = davis, 
+         xlab = "Height (cm)", ylab = "Weight (kg)")
+```
+
+
+There is an obvious outlier and after some investigation, we see it is row 12.  Therefore, we want to remove that data point from our analysis (this is most likely a data entry error as there would not be someone who is less than 60 cm in real life, or at least not an adult).
+```{r}
+#| label: no_outlier
+new_davis <- davis[-12,] #removes row 12 from the dataframe
+
+new_davis <- davis |> #tidyverse method for removing outliers
+  filter(height > 60)
+```
+
+
+Let's use some new arguments in `ggformula` to look at our data, but split by sex.
+```{r}
+#including sex in the model, WITH outlier
+gf_point(weight ~ height, data = davis, 
+         shape = ~sex, color = ~sex, 
+         xlab = "Height (cm)", ylab = "Weight (kg)") |>
+  gf_lm(size = 1) +
+  ylim(40,180) +
+  scale_color_viridis_d(end = 0.85)
+
+#including sex in the model, outlier removed
+gf_point(weight ~ height, data = new_davis, 
+         shape = ~sex, color = ~sex, 
+         xlab = "Height (cm)", ylab = "Weight (kg)") |>
+  #linear model graph uses parameters from gf_point: 2 separate lines
+  gf_lm(size = 1) +
+  scale_color_viridis_d(end = 0.85)
+```
+
+
+By default, the above code treats the lines for each sex independently. We can force the lines to have identical slopes with the code below:
+
+```{r}
+gf_point(weight ~ height, data = new_davis, 
+         shape = ~sex, color = ~sex, 
+         xlab = "Height (cm)", ylab = "Weight (kg)") +
+  #geom_parallel_slopes comes from moderndive package
+  geom_parallel_slopes(se = FALSE) +
+  scale_color_viridis_d(end = 0.85)
+```
+
+
+Here are the model coefficients
+
+```{r}
+#| label: factor
+#factor tells R to treat the "sex" variable as categorical
+#Run the model, view coefficients and hypothesis tests
+model_hws <- lm(weight ~ height + factor(sex), data = new_davis)
+coef(model_hws)
+```
+
+Hypohtesis Testing
+
+```{r}
+#| label: davis_tests
+#hypothesis tests, coefficients, and VIF calculations
+summary(model_hws)
+vif(model_hws)
+```
+
+
+What are the additional assumptions we are making to construct a model with a qualitative variable?
+
+
+```{r}
+#| label: hws_assumptions
+#diagnostic plots for the hws model
+plot(model_hws, 1, add.smooth = FALSE)
+plot(model_hws, 2)
+plot(model_hws, 5, add.smooth = FALSE)
+```
+
+
+
+```{r}
+#| label: mod_interaction
+#factor tells R to treat the "sex" variable as categorical
+#Run the model, view coefficients and hypothesis tests
+model_w_hs_int <- lm(weight ~ height*factor(sex), data = new_davis)
+coef(model_w_hs_int)
+```
+
+```{r}
+#| label: int_tests
+#hypothesis tests and coefficients for interaction model
+summary(model_w_hs_int)
+
+#vif calculations
+vif(model_w_hs_int)
+```
+What are the additional assumptions we are making to construct a model with a qualitative variable?
+
+
+```{r}
+#| label: int_assumptions
+#diagnostic plots for interaction model
+plot(model_w_hs_int, 1, add.smooth = FALSE)
+plot(model_w_hs_int, 2)
+plot(model_w_hs_int, 5, add.smooth = FALSE)
+```
+
