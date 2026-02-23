@@ -1,0 +1,329 @@
+---
+title: "Notes 04: Extensions of the Linear Model"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+
+#For VIF (vif and scatterplot function)
+library(car)
+
+#standard packages we use
+library(mosaic)
+library(ggformula)
+library(janitor)
+
+#for data that we use as our interaction example
+library(Stat2Data)
+```
+
+# Higher Order Terms
+
+```{r}
+#| label: perch_data
+#Perch Data
+perch <- read.csv("Perch.csv")
+
+perch <- perch |>
+  clean_names()
+
+str(perch)
+```
+
+## Explore the Data
+
+First, we should complete some exploratory data analysis.
+
+```{r}
+#| label: wt_wdth_plot
+#scatterplot
+gf_point(weight ~ width,
+         data = perch,
+         xlab = "Perch Width (cm)",
+         ylab = "Perch Weight (g)")
+
+```
+
+The trend looks quadratic, so we fit a model that contains a quadratic term (the width squared).
+
+```{r}
+#| label: model_width2
+#creates new variable for squared width values and adds them onto the dataframe Perch
+perch2 <- perch |>
+  mutate(width_2 = width^2)
+
+model_w2 <- lm(weight ~ width + width_2, data = perch2)
+summary(model_w2)
+```
+
+Let's visualize the fit.
+
+```{r}
+#| label: plot_width2
+#gf_point creates the scatterplot
+#gf_lm creates the quadratic line to fit the data
+gf_point(weight ~ width, data = perch, 
+         xlab = "Perch Width (cm)", 
+         ylab = "Perch Weight (g)") |>
+  gf_lm(formula = y ~ poly(x, 2))
+
+#resource: http://www.mosaic-web.org/ggformula/reference/gf_smooth.html
+
+#gf_lm formula could also include log(x) (note the log function in R refers to natural log), other orders of polynomials such as ploy(x, 3), or exp(x)
+```
+
+## Interpretations of Quadratic Terms
+
+In order to interpret the quadratic and linear terms, note that :
+
+-   the quadratic term tells us the direction and steepness of the curvature(does the curve bend up or down? )
+
+-   the linear term often does not make as much sense. It is technically interpreted as the "rate of change (slope) when x is equal to zero."
+
+However, this will make little sense in context when you have an x variable that can never take on the value zero.The solution is to force 0 to make sense as an x value.
+
+To force the linear term to make sense, we will *center* our data and refit the model. This means that we create a new variable where we subtract the mean of x (width) from each x value, so the average of the centered value is zero. Our new centered value DOES make sense when it is zero (that means the observed value is exactly equal to the mean).
+
+```{r}
+gf_histogram(~width - mean(width), data = perch2)
+```
+
+```{r}
+#| label: center_perch
+#Resource: https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faqhow-do-i-interpret-the-sign-of-the-quadratic-term-in-a-polynomial-regression/
+
+perch3 <- perch2 |>
+  mutate(width_cent = width - mean(width)) |> #creates centered width variable
+  mutate(width_cent2 = width_cent^2) #creates squared centered width variable
+
+#in our new data, we see the first fish had a with of 1.4, which gives them a centered value of 1.4-4.739 = -3.339, for example. This tells you how far away the observed fish width is from the mean
+head(perch3)
+```
+
+```{r}
+#| label: mean_width
+#recall the mean with was 4.739
+mean( ~ width, data = perch)
+```
+
+```{r}
+#| label: model_centered
+#build the regression model with the centered data
+model_c2 <- lm(weight ~ width_cent + width_cent2, data = perch3)
+summary(model_c2)
+```
+
+$y_{wt} = 316.966 + 172.788x_{wd_c} + 20.934x_{wd_c}^2$
+
+-   the quadratic term tells us the direction and steepness of the curvature the partial slope for width squared is 20.934, so as width increases, weight will increases
+
+-   the linear term tell us the rate of change at the mean value of width the partial slope for width is 172.788, which tell us that when the width is 4.73986 cm, the rate of change of the weight is 172.788 g/cm
+
+```{r}
+#| label: centered_perch_plot
+#new scatterplot showing the centered x axis
+gf_point(weight ~ width_cent,
+         data = perch3,
+         xlab = "Perch Width (cm) Minus Mean Width",
+         ylab = "Perch Weight (g)") |>
+  gf_lm(formula = y ~ poly(x, 2))
+```
+
+In the centered model, the quadratic coefficient does not change in value, but the linear coefficient now makes more sense as a measure of the *rate of change at the mean value of width*. The linear coefficient now better reflects the linear relationship in the data.
+
+## Centering Reduces Collinearity
+
+An added benefit of centering the x variable is that it reduces the collinearity between x and x-squared. Let's look at the correlation and VIF values for the models with `width` versus `width_centered`.
+
+```{r}
+#| label: cor_wd_wd2
+#correlation and VIF for original width and width_squared variables
+cor(width ~ width_2, data = perch3)
+#remember model_w2 is weight~width+width_2
+vif(model_w2)
+
+#new scatterplot showing correlation between width and width_2
+gf_point(width_2 ~ width,
+         data = perch3,
+         xlab = "Perch Width",
+         ylab = "Perch Width Squared")
+```
+
+We see that `width` and `width_2` have a correlation of 0.98!! This results in VIF values of 48! A big collinearity problem.
+
+```{r}
+#| label: cor_centered_wd_wd2
+#correlation and VIF for CENTERED width and width_squared variables
+cor(width_cent ~ width_cent2, data = perch3)
+#remember model_c2 is weight~width_cent+width_cent2
+vif(model_c2)
+
+gf_point(width_cent2 ~ width_cent,
+         data = perch3,
+         xlab = "Perch Width, Centered",
+         ylab = "Perch Width Centered, Squared")
+```
+
+After centering the variables, centered width and centered width squared have a correlation of 0.44, and VIF is only 1.23.
+
+*Conclusion:* Centering the width variable gave us interpretable partial slopes in our quadratic model, AND it solved our collinearity issue!
+
+
+
+# Interaction Terms
+
+We know that children grow taller as they grow older, but do biological males and females have the same rate of growth? We analyzed the relationship between the height of children (inches) versus the age of children (in months) split by biological sex.
+
+## Explore the Data
+
+```{r}
+#| label: data_kids
+#data is from the Stat2Data package
+data(Kids198)
+
+kids <- Kids198 |>
+  clean_names()
+
+str(kids)
+```
+
+Note that in this dataset, Sex is categorical, but is recorded as 0's and 1's. R will naturally treat this variable as numeric, so we need to specify that it shoul be categorical in our R code.
+
+Let's observe the relationship between Age and Height as it differs by Sex.
+
+```{r}
+#| label: plot_age_ht
+#scatterplot showing separate regression lines for each biological sex.
+gf_point(height ~ age,
+         shape = ~ factor(sex),
+         color = ~ factor(sex),
+         data = kids,
+         xlab = "Age (months)",
+         ylab = "Height (inches)") |>
+  gf_lm() 
+
+```
+
+## Build the Model
+
+To create an interaction term in R, use the `*` symbol between the two x variables where you want an interaction.
+
+```{r}
+#| label: model_kids
+model_ah <- lm(height ~ age + factor(sex) + age * factor(sex), data = kids)
+
+#summary of model
+summary(model_ah)
+```
+
+Remember females are coded as 1 in the dataset. The interaction term tells us that the slope between Age and Height for females is .06 smaller than the slope for males.
+
+Here are the graphics to assess the assumptions.
+
+```{r}
+#| label: model_kids_assump
+plot(model_ah, 1, add.smooth = FALSE)
+plot(model_ah, 2)
+plot(model_ah, 5, add.smooth = FALSE)
+```
+
+Based on the plots, all assumptions appear valid. 
+
+## Confidence Interval for Interaction
+
+We can calculate a confidence interval for the interaction term: change in slope associated with Age when sex is female for the child. Notice how specific we need to be
+
+```{r}
+#| label: kids_conf
+confint(model_ah, "age:factor(sex)1")
+```
+
+What if we had not included the interaction term?
+
+```{r}
+#| label: new_mod_no_int_kids
+model_noint <- lm(height ~ age + factor(sex), data = kids)
+summary(model_noint)
+```
+
+```{r }
+#| label: new_mod_kids_assump
+plot(model_noint, 1, add.smooth = FALSE)
+plot(model_noint, 2)
+plot(model_noint, 5, add.smooth = FALSE)
+```
+
+Notice that the assumptions still look satisfied based on the plot even if we do not include the interaction (well - all assumptions but the one associated with parallel lines for each group). Plots and significance alone are not sufficient - always look at the scatterplot first!!
+
+
+```{r}
+#| label: new_mod_log
+kids <- kids |> 
+  mutate(age2 = age^2, logage = log(age))
+
+model <- lm(height ~ logage*factor(sex), data = kids)
+summary(model)
+```
+
+# Importance of Diagnostic Plots
+
+Consider this data about a Lemonade Urn. The urn is filled with lemonade, after which the spigot is opened. A stopwatch is used and over time (in seconds), the amount of lemonade is measures from the bottom of the urn to the lemonade-line. 
+
+```{r}
+#| label: lemonade_data
+#Lemonade Data
+lemonade <- read.csv("Lemonade.csv")
+
+lemonade <- lemonade |>
+  clean_names()
+
+head(lemonade)
+
+```
+
+```{r}
+#| label: lem_explore
+#summary stats
+df_stats(~ depth, data = lemonade)
+df_stats(~ time, data = lemonade)
+
+#scatterplot
+gf_point(depth ~ time,
+         data = lemonade,
+         xlab = "time (seconds)",
+         ylab = "Lemonade Depth")
+```
+
+```{r}
+#| label: lem_model
+#linear model
+mod_lem <- lm(depth ~ time, data = lemonade)
+
+summary(mod_lem)
+
+```
+
+From the output, we see a statistically significant model, with a high R-squared value. 
+
+Let's check assumptions.
+```{r}
+#| label: lem_assumptions
+plot(mod_lem, 1, add.smooth = FALSE)
+plot(mod_lem, 2)
+plot(mod_lem, 5, add.smooth = FALSE)
+
+```
+
+What do you notice about the diagnostic plots?
+
+
+
