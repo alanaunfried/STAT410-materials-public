@@ -1,0 +1,112 @@
+---
+title: "Notes 05: Automated Variable Selection Methods"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+
+#standard packages
+library(ggformula)
+library(mosaic)
+library(janitor)
+library(tidyverse)
+
+#For VIF (vif and scatterplot function)
+library(car)
+#For best models of each size: (leaps function below)
+library(leaps)
+#for easy sorting and wrangling of data (arrange function below)
+library(dplyr)
+```
+
+
+
+Here is a data set that looks at the first year GPA of college freshman.  We want to determine if we could predict first year GPA based on other variables we could collect simply from their application and/or see if we are creating obstacles to success for students 
+```{r}
+fygpa <- read.csv("FirstYearGPA.csv")
+fygpa <- fygpa |>
+  clean_names() 
+
+head(fygpa)
+str(fygpa)
+```
+Notice the data set `fygpa` has 10 variables, with the first variable being the Response `gpa` and the remaining 9 (2:10) the potential explanatory variables.  
+
+
+## Adjusted R-squared
+
+First, we will try to select for some variables in our model based on Adjusted $R^2$ or $R_{adj}^2$.  We will be using the package `leaps`, but there are other package options as well.
+
+First, we define a set of explanatory variables.  Since we know columns 2 through 10 are explanatory variables, we can use the index `[2:10]` to easily include them all.
+```{r}
+#must used read.csv() for the data, and no categorical
+
+#names function prints the actual variable names. Otherwise it just prints X1 X2 etc
+#and then you have to match up the names yourself
+models_r2 <- leaps(x = fygpa[ , 2:10], #define our explanatory variables
+                   y = fygpa[ , 1],  #defines our response
+                   method = "adjr2", #using adjusted R^2 as the metric
+                   nbest = 2, #print out the 2 best models (2 models with highest adj R^2)
+                   names = names(fygpa[, 2:10]))
+
+models_r2
+
+#You can also use the select() function from dplr to list the names of the actual variables you want to include. In `select` first list the dataset and then the variable names
+                     
+models_r2_select<-leaps(x=select(fygpa, hsgpa, satv, satm, male, hu, ss, first_gen, white, college_bound),
+                     y=fygpa$gpa,
+                     method="adjr2",
+                     nbest=2,
+                     names=names(select(fygpa, hsgpa, satv, satm, male, hu, ss, first_gen, white, college_bound)))
+
+models_r2_select
+
+
+```
+
+
+To sort the results to easily see which adjusted R-squared value is largest to smallest, we can use the `arrange()` function from the package `dplyr`.
+
+```{r}
+
+#data.frame tells R to create a data frame with the following outputs from the leaps function
+#the $ say which elements from the leaps function to build into the new table
+# the "-models$adjr2" says to sort the data in descending order based on adj R^2
+arrange(data.frame(models_r2$size, 
+                   models_r2$which, 
+                   models_r2$adjr2),
+        -models_r2$adjr2)
+
+```
+
+
+Always follow up with 1) significance testing...
+
+```{r}
+model <- lm(gpa ~ hsgpa + satv + 
+              hu + factor(white), data = fygpa)
+summary(model)
+```
+
+
+...and 2) assumptions. You should have already checked VIF ahead of time, so here focus on the other assumptions. 
+```{r}
+plot(model, 1, add.smooth = FALSE)
+plot(model, 2)
+plot(model, 5, add.smooth = FALSE)
+```
+
+
+
+
+
+

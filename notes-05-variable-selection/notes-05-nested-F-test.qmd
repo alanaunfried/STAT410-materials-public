@@ -1,0 +1,163 @@
+---
+title: "Notes 05: Nested F Tests"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+
+#For VIF (vif and scatterplot function)
+library(car)
+
+#standard packages
+library(ggformula)
+library(mosaic)
+library(janitor)
+
+```
+
+
+# Nested F-test
+Here is a data set that looks at the first year gpa of college freshman.  We want to determine if we could predict first year gpa based on other variables we could collect simply from their application and/or see if we are creating obstacles to success for students 
+```{r}
+fygpa <- read.csv("FirstYearGPA.csv")
+
+fygpa <- fygpa |>
+  clean_names()
+
+head(fygpa)
+str(fygpa)
+```
+
+## Full Model
+
+```{r}
+#create the full model
+full <- lm(gpa ~ hsgpa + satv + satm + factor(male) + factor(first_gen) + factor(white) +
+             factor(college_bound) + hu + ss, data = fygpa)
+
+#calculate VIF BEFORE any variable selection methods! 
+vif(full)
+```
+
+```{r}
+#summary output
+summary(full)
+
+#anova output with each variable separate (carefull interpreting these p-values! They are not the same as p-values from the summary table; they are for partial slopes when sequentially adding variables to the model)
+anova(full)
+
+```
+
+Here is the manual way to calculate the proper SS and F statistic from the `anova` function output. (You don't have to do this if you use the simplified function below to get the table.)
+
+```{r}
+avfull <- anova(full)
+#DF Regression
+(dfR <- sum(avfull$Df[1:(nrow(avfull) - 1)]))
+#SS Regression
+(SSR <- sum(avfull$`Sum Sq`[1:(nrow(avfull) - 1)]))
+#MS for Regression
+(MSR <- SSR / dfR)
+(MSEfull <- avfull$`Mean Sq`[nrow(avfull)])
+(dfefull <- avfull$Df[nrow(avfull)])
+(F <- MSR / MSEfull)
+(1 - pf(F, dfR, dfefull))
+```
+
+## Simplified ANOVA Table
+
+What if we want the table of regression sums of squares instead of each variable separately? Define a function.
+
+```{r}
+#code modified from this website: https://bookdown.org/egarpor/SSS2-UC3M/multlin-aovfit.html#multlin-aovfit-anova
+#Note I do NOT expect you to write a function like this yourself!
+simpleAnova <- function(object, ...) {
+
+  # Compute anova table
+  tab <- anova(object, ...)
+
+  # Obtain number of predictors
+  p <- nrow(tab) - 1
+
+  # Add predictors row
+  predictorsRow <- colSums(tab[1:p, 1:2])
+  predictorsRow <- c(predictorsRow, predictorsRow[2] / predictorsRow[1])
+
+  # F-quantities
+  Fval <- predictorsRow[3] / tab[p + 1, 3]
+  pval <- pf(Fval, df1 = p, df2 = tab$Df[p + 1], lower.tail = FALSE)
+  predictorsRow <- c(predictorsRow, Fval, pval)
+
+  # Simplified table
+  tab <- rbind(predictorsRow, tab[p + 1, ])
+  row.names(tab)[1] <- "Regression"
+  return(tab)
+
+}
+
+# Simplified ANOVA
+simpleAnova(full)
+```
+
+The simplified ANOVA table shows the results of the general hypothesis test for the full regression model.
+
+## Reduced Model
+
+We can repeat the same process for the reduced model:
+```{r}
+#Reduced Model
+reduced <- lm(gpa ~ hsgpa + factor(male) + factor(first_gen) + factor(white) + factor(college_bound) +
+                hu + ss, data = fygpa)
+
+#full ANOVA table
+anova(reduced)
+
+#simplified ANOVA table
+simpleAnova(reduced)
+```
+
+Manually calculating the F test from the original ANOVA table.
+```{r}
+avred <- anova(reduced)
+#DF Regression
+(dfRred <- sum(avred$Df[1:(nrow(avred) - 1)]))
+#SS Regression
+(SSRred <- sum(avred$`Sum Sq`[1:(nrow(avred) - 1)]))
+#MS for Regression
+(MSRred <- SSRred / dfRred)
+(F <- MSRred / avred$`Mean Sq`[nrow(avred)])
+(1 - pf(F, dfRred, avred$Df[nrow(avred)]))
+```
+
+
+## Nested F-Test for SAT
+
+The then test the hypothesis that the two SAT terms are necessary in the model:
+
+$H_0: \beta_{satv}=\beta_{satm}=0$  
+
+$H_1:$ at least one $\beta_i \neq 0$
+
+
+We can test using the `anova()` function.  Always put the *smaller model first* in the function.
+```{r}
+anova(reduced,full)
+```
+
+The sums of squares comes from the difference in the full versus reduced model SS Regression and the degrees of freedom is the difference.  We assess the comparison by comparing the MS for the differences to the MSE for the full model. Here is the manual calculation.
+```{r}
+SSR - SSRred
+dfR - dfRred
+(MSEdiff <- (SSR - SSRred) / (dfR - dfRred))
+MSEdiff / MSEfull #Nest F Value
+1 - pf(MSEdiff / MSEfull, dfR - dfRred, dfefull)
+```
