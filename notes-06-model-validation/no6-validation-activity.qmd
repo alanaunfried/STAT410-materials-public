@@ -1,0 +1,347 @@
+---
+title: "Notes 06: Validation and Cross-Validiation"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = FALSE, comment = "", message = FALSE, warning = FALSE)
+
+#install this package first (R package for Introduction to Statistical Learning Book)
+library(ISLR)
+
+library(ggformula)
+library(mosaic)
+
+```
+
+
+## Validation
+We will be using data from the `ISLR` package.
+```{r}
+#| label: auto_data
+#load the Auto dataset from the ISLR package
+data(Auto)
+```
+
+We can observe the structure of the data using the `str()` and `head()` functions.
+```{r}
+#| label: data_str
+str(Auto)
+head(Auto)
+```
+
+1. How many variables are in the Auto dataset?  
+
+>Insert Answer Here  
+
+
+2. How many observations are in this dataset?  
+```{r}
+#| label: row_count
+#total observations
+n <- nrow(Auto)
+```
+
+>Insert Answer Here  
+
+3. We want to predict a car’s miles-per-gallon (`mpg`) using `horsepower`. Create the scatterplot of these two variables and be sure to appropriately label the graph. What sort of relationship do you see?    
+
+```{r}
+#| label: scatter_hp
+gf_point(mpg ~ horsepower,
+         data = Auto,
+         xlab = "Horsepower",
+         ylab = "Miles Per Gallon")
+```
+
+>Insert Answer Here  
+
+
+### Selecting a Training Set
+We need to choose a subset of the data to be our training set.  Let's start with a 50% training set.  The easiest way to do this is to choose a subset of 50% of the *row id numbers* so that we can easily extract all columns of data associated with each row.  Rerun the code chunk - does the training data remain the same each time?  How does the training data compare to the original data?    
+
+```{r}
+#| label: select_training
+#sample (without replacement) half of the rows 
+
+#this code says: out of n numbers, pick half of them
+train <- sample(n, (0.50) * n, replace = FALSE)
+#view all the row numbers you have selected but sorted in order
+sort(train)
+```
+
+
+```{r}
+#| label: scatter_training
+#plot JUST training data
+Auto[train, ] %>%
+  gf_point(mpg ~ horsepower,
+           xlab = "Horsepower",
+           ylab = "Miles Per Gallon")
+
+```
+
+>Insert Answer Here
+
+
+Now rerun the code, but first run the code `set.seed(1)`.  Rerun the code chunk again.  Do the selected rows change?
+```{r}
+#| label: seed_training
+set.seed(1)
+#sample (without replacement) half of the rows 
+#this code says: out of n numbers, pick half of them
+train <- sample(n, (0.50) * n, replace = FALSE)
+#view all the row numbers you have selected but sorted in order
+sort(train)
+#plot the training data
+Auto[train, ] %>%
+  gf_point(mpg ~ horsepower,
+           xlab = "Horsepower",
+           ylab = "Miles Per Gallon")
+```
+
+
+4.  What does the `set.seed()` function do?  
+
+>Insert Answer Here  
+
+5. How many rows of data will there be in our training set? What about in our testing set?   
+
+>Insert Answer Here  
+
+
+
+### Fitting the Model to the Training Set
+	
+
+6.  Use the code to fit the first-order linear model using the training data. How does this line of code look different from previous times that we have used the `lm()` function?  
+
+```{r}
+#| label: training_model_1
+#subset option in lm will only use the rows of data you specify to fit the model
+#fit the model ONLY using the training data
+lm_fit <- lm(mpg ~ horsepower, data = Auto, subset = train)
+summary(lm_fit)
+```
+
+7. Is the model significant? What is the value of Adjusted $R^2$?  
+
+>Insert Answer Here  
+
+
+8. Run the following line of code.  
+```{r}
+#| label: mse_testing
+mean((Auto$mpg - predict(lm_fit, Auto))[-train] ^ 2)
+```
+
+
+8a. Explain in words what each piece of this code is doing. (If it helps, try running small pieces of this line of code at a time, such as just `predict(lm_fit, Auto)` to start understanding what all the pieces do).  
+
+>Insert Answer Here  
+
+
+
+8b. What is the value you get from this code?  
+
+>Insert Answer Here  
+
+
+
+### Fitting Other Models to the Training Data  
+
+9. We noticed a non-linear relationship between `mpg` and `horsepower`.  We want to make sure we fit the appropriate model before assess its fit via validation methods. Now fit the quadratic model, saved as `lm_fit2`.  
+
+```{r}
+#| label: training_model_2
+lm_fit2 <- lm(mpg ~ poly(horsepower, 2), data = Auto, subset = train)
+summary(lm_fit2)
+mean((Auto$mpg - predict(lm_fit2, Auto))[-train] ^ 2)
+```
+
+9a. What does the `poly()` function do?  
+
+>Insert Answer Here  
+
+
+9b. What is the value of the test MSE?  
+
+>Insert Answer Here  
+
+
+10. Now fit the cubic model, `lm_fit3`. What is the value of the test MSE?
+```{r}
+#| label: training_model_3
+lm_fit3 <- lm(mpg ~ poly(horsepower, 3), data = Auto, subset = train)
+summary(lm_fit3)
+mean((Auto$mpg - predict(lm_fit3, Auto))[-train] ^ 2)
+```
+
+> Insert Answer Here
+
+11. Of these three models (first-order, quadratic, and cubic), which has the smallest test MSE? What does this mean in terms of how well each model predicts?  
+
+>Insert Answer Here  
+
+
+12. Remember that we **randomly** split the data into the testing and training groups. Now, use `set.seed(2)` to split the data. Are the same observations put into each group as when we used `set.seed(1)`?
+
+```{r}
+#| label: new_training
+set.seed(2)
+train <- sample(n, (0.50) * n, replace = FALSE)
+sort(train)
+```
+
+>Insert Answer Here  
+
+
+13. After using `set.seed(2)`, rerun each of the 3 linear models and recalculate the test MSE’s. What do you notice compared to the previous set of 3 test MSE’s?
+
+```{r}
+#| label: new_training_models
+lm_fit <- lm(mpg ~ horsepower, data = Auto, subset = train)
+mean((Auto$mpg - predict(lm_fit, Auto))[-train] ^ 2)
+
+lm_fit2 <- lm(mpg ~ poly(horsepower, 2), data = Auto, subset = train)
+mean((Auto$mpg - predict(lm_fit2, Auto))[-train] ^ 2)
+
+lm_fit3 <- lm(mpg ~ poly(horsepower, 3), data = Auto, subset = train)
+mean((Auto$mpg - predict(lm_fit3, Auto))[-train] ^ 2)
+```
+
+>Insert Answer Here  
+
+
+## Cross-Validation
+First, in order to do cross-validation we cannot use the `lm()` function to fit our regression models.  Instead, we will use the function `glm()`.  The difference between these two functions is that `lm()` uses least squares regression and `glm()` uses a method call maximum likelihood, which we will discuss later.  In most cases, if conditions are satisfied for `lm()` the `glm()` method will produce the same model fit.
+
+1. Run the model using both functions and compare the output. What is the same? What is different?
+
+```{r}
+#| label: glm_vs_lm
+#reminder of  lm model output (using all data)
+lm_fit <- lm(mpg ~ horsepower, data = Auto)
+summary(lm_fit)
+
+#glm model
+glm_fit1 <- glm(mpg ~ horsepower, data = Auto)
+summary(glm_fit1)
+```
+
+>Insert Answer Here  
+
+
+
+2. Consider the following code to run a K-Fold Cross-Validation. Why do we need to set the seed in this code?  
+
+```{r}
+#| label: cv_linear
+#Use the cv.glm function from the "boot" library
+#(Make sure to install the package!)
+library(boot)
+set.seed(17)
+
+#Calculate cross-validation prediction error
+cv.err1 <- cv.glm(Auto, glm_fit1, K = 5)
+
+#This code outputs the average Test MSE
+cv.err1$delta[1]
+```
+
+>Insert Answer Here  
+
+
+3. Run the cv.glm code. How many “folds” or groups is this code creating? Did this code require the model from the lm function or from the glm function?  
+
+>Insert Answer Here  
+
+
+4. What value did you get for the average Test MSE?  
+
+>Insert Answer Here  
+
+Now use the quadratic model and for the K-Fold Cross-Validation.  
+```{r}
+#| label: cv_quad
+glm_fit2 <- glm(mpg ~ poly(horsepower, 2), data = Auto)
+cv.err2 <- cv.glm(Auto, glm_fit2, K = 5)
+cv.err2$delta[1]
+```
+
+
+5.  What is your average Test MSE?  
+
+>Insert Answer Here  
+
+Now use the cubic model and for the K-Fold Cross-Validation.
+```{r}
+#| label: cv_poly3
+glm_fit3 <- glm(mpg ~ poly(horsepower, 3), data = Auto)
+cv.err3 <- cv.glm(Auto, glm_fit3, K = 5)
+cv.err3$delta[1]
+```
+
+6. What is your average Test MSE?  
+
+>Insert Answer Here  
+
+
+7. Which of the three models would you recommend as “best” based on the results?  
+
+>Insert Answer Here  
+
+
+8. Now look at the code that uses a “for” function.  What do you think this code is doing?  
+```{r}
+set.seed(20)
+cv.err <- rep(0, 5)
+#system.time will keep track of how long the computation takes
+system.time(for (i in 1:5) {
+  glm_fit <- glm(mpg ~ poly(horsepower, i), data = Auto)
+  cv.err[i] <- cv.glm(Auto, glm_fit, K = 5)$delta[1]
+})
+
+plot(cv.err, type = "b")
+```
+
+>Insert Answer Here  
+
+
+### Leave-One-Out Cross-Validation
+For LOOCV, either set `k=` to sample size, or remove the `k=` argument entirely.  Adapt the provided code associated with the `for` loop.  
+
+```{r}
+#| label: loop_k1_cv
+set.seed(13)
+cv.err <- rep(0, 5)
+#system.time will keep track of how long the computation takes
+system.time(for (i in 1:5) {
+  glm_fit <- glm(mpg ~ poly(horsepower, i), data = Auto)
+  cv.err[i] <- cv.glm(Auto, glm_fit)$delta[1]
+})
+
+
+plot(cv.err, type = "b")
+cv.err
+```
+
+9.	Compare how long the loop takes to run for K=5 versus using LOOCV (you will have to modify the code for LOOCV). What is the difference?  
+
+>Insert Answer Here  
+
+
+10.	Compare the values in the cv.err output. Which size model has the LOWEST Test MSE? Do you think this model is actually the best one? Why or why not?  
+
+>Insert Answer Here  
+
+
