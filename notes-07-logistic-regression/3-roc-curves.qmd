@@ -1,0 +1,78 @@
+---
+title: "ROC Curves"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+```
+
+## Multiple Logisitic Regression
+We can extend everything we know about Logistic Regression and Multiple Regression in general to include multiple explanatory variables to predict a binary outcome.
+
+```{r}
+library(HSAUR) # be sure to install, this package has the data plasma
+data(plasma)
+
+full <- glm(ESR ~ fibrinogen + globulin, family = binomial(link = "logit"), data = plasma)
+exp(coef(full)) # odds ratios for partial slopes and intercept
+exp(coef(full)[1]) / (1 + exp(coef(full)[1])) # probability when x=0
+summary(full)
+```
+
+Just like with multiple regression, we need to test the full model, or the general hypothesis.  We can do this with the G-test.
+
+$H_0: \beta_1 = \beta_2=0$  
+$H_1:$ at least one $\beta_i \neq 0$  
+
+```{r}
+# 30.885-22.971
+(G <- full$null.deviance - full$deviance)
+(df <- full$df.null - full$df.residual)
+1 - pchisq(G, df)
+```
+
+
+## Nested Model Tests
+Just like with multiple regression and the Nested F-test, we can test for subsets of variables or individual variables using the G-test.
+```{r}
+reduced <- glm(ESR ~ fibrinogen, family = binomial(link = "logit"), data = plasma)
+summary(reduced)
+
+# Testing if Gam can be removed from the model
+# 24.84-22.971
+(G <- reduced$deviance - full$deviance)
+(df <- reduced$df.residual - full$df.residual)
+1 - pchisq(G, df)
+
+anova(reduced, full, test = "Chisq")
+```
+
+
+
+##Receiver Operating Characteristic Curve
+Here we can construct the ROC curve for the full model, akin to an $R^2$ value for linear regression.  
+```{r}
+library(pROC) # there are other options for ROC as well
+predpr <- predict(full, type = c("response"))
+roccurve <- roc(ESR ~ predpr, data = plasma)
+ggroc(roccurve)
+auc(roccurve)
+```
+
+
+Here is the ROC curve for the reduced model.
+```{r}
+predprred <- predict(reduced, type = c("response"))
+roccurve_red <- roc(ESR ~ predprred, data = plasma)
+ggroc(roccurve_red)
+auc(roccurve_red)
+```

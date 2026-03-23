@@ -1,0 +1,151 @@
+---
+title: "Simple Logistic Regression"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+# standard packages we use
+library(mosaic)
+library(ggformula)
+library(janitor)
+
+# for data cleaning
+library(dplyr)
+```
+
+## Simple Logisitic Regression
+
+There are two ways data may be organized for Logistic Regression.  Here is an example where the response data is organized by counts.  Data may take this form when the explanatory variables have distinct grouping values (categorical or discrete) and NOT when explanatory variables are continuous.  
+```{r}
+# Logistic Regression for ck data
+count_ha <- read.csv("countHeartAttack.csv")
+
+count_ha <- count_ha |>
+  clean_names()
+
+str(count_ha)
+
+
+count_ha <- count_ha |> 
+  mutate(total = ha + no_ha)
+
+```
+
+To fit our model, we need to define the two columns that represent Y=1 and Y=0 as our response using `cbind()`.  
+```{r}
+log_ha <- glm(cbind(ha, no_ha) ~ ck, 
+              family = binomial(link = "logit"), data = count_ha)
+summary(log_ha)
+```
+
+
+What happens if we change the order of the variables in the `cbind()` function?
+```{r}
+log_no_ha <- glm(cbind(no_ha, ha) ~ ck, family = binomial(link = "logit"), data = count_ha)
+summary(log_no_ha)
+```
+
+
+### Likelihood Ratio Test
+Note that the deviance values are different than in lecture notes, but the G statistic is the same.  The output in the notes used the individual data, not the count data. You can "hand calculate" it or use `anova()` to calculate the LRT. 
+```{r}
+# Calculate G-statistic
+G <- log_ha$null.deviance - log_ha$deviance
+# 311.29-28.14
+
+# degrees of freedom for test
+df <- log_ha$df.null - log_ha$df.residual
+
+# p-value
+1 - pchisq(G, df)
+anova(log_ha, test = "Chisq")
+```
+
+
+### Logistic Regression with Individual Data
+Here is an example of the logistic model and LRT for when data is formatted in a "tidy" format - each row a person and each column a variable. Notice: for Individual vs Count data setup, the G statistics, degrees of freedom, and p-values are the same. BUT, the actual Null and Residual Deviances are Different!
+```{r}
+# read in the data
+ind_ha <- read.csv("indHeartAttack.csv")
+
+ind_ha <- ind_ha |>
+  clean_names()
+
+str(ind_ha)
+```
+
+```{r}
+# run the model
+log_ha_ind <- glm(ha ~ ck, data = ind_ha, family = binomial)
+summary(log_ha_ind)
+```
+
+
+```{r}
+# G stat for ck model with Individual Data
+# 470.92-187.77
+G <- log_ha_ind$null.deviance - log_ha_ind$deviance
+
+# degrees of freedom
+# 2 parameters in full model, 1 in reduced
+df <- log_ha_ind$df.null - log_ha_ind$df.residual
+
+# p-value
+1 - pchisq(G, df)
+
+# automated result
+anova(log_ha_ind, test = "Chisq")
+```
+
+## Student sleep study example
+Here is the Logistic Model
+```{r}
+sleep <- read.csv("sleep.csv")
+model <- glm(hours ~ ages, family = binomial("logit"), data = sleep)
+summary(model)
+```
+
+Here is the LRT
+```{r}
+# G statistic
+G <- model$null.deviance - model$deviance
+# 569.60-566.19
+
+# degrees of freedom
+df <- model$df.null - model$df.residual
+
+# p-value
+1 - pchisq(G, df)
+# Fail to reject the null hypothesis
+# Another way to get the same test
+anova(model, test = "Chisq")
+```
+
+Since there are only five values for the explanatory variable, we can summarize the proportion of "successes" per age group to visually observe our model fit.  Again, if our explanatory variable is continuous, this would not be as straightforward.  
+
+```{r}
+# group_by and summarise from the dplyr package, loaded at beginning
+prophours <- sleep |>
+  group_by(ages) |>
+  summarise(prop = mean(hours))
+
+# scatterplot
+gf_point(prop ~ ages,
+  data = prophours,
+  xlab = "Age (years)",
+  ylab = "Proportion of Students") |>
+  gf_lm()
+
+# predictions
+pred <- predict(model, newdata = data.frame(ages = 14:18), type = c("response"))
+cbind(prophours, pred)
+```
