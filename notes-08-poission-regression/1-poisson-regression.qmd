@@ -1,0 +1,139 @@
+---
+title: "Notes 08: Poisson Regression"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+#| echo: false
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+
+# standard packages
+library(mosaic)
+library(ggformula)
+theme_set(theme_light())
+```
+
+
+## Poisson Regression Analysis - Horseshoe Crabs
+
+```{r}
+crab <- read.table("crab.txt")
+```
+The data does not come with column names so we will make the column.
+```{r}
+colnames(crab) <- c("obs", "color", "spine", "width", "weight", "sat")
+
+str(crab)
+head(crab)
+```
+
+
+## Poisson Regression of Satellites on Width
+```{r}
+crab_model <- glm(sat ~ width, data = crab, family = poisson(link = log))
+summary(crab_model)
+
+exp(predict(crab_model, interval = "prediction", newdata = data.frame(width = 25)))
+exp(-3.30 + 0.164*25)
+```
+
+We can calculate the transformed parameters and confidence intervals as follows:
+```{r}
+exp(coef(crab_model))
+exp(confint(crab_model, level = 0.95))
+```
+
+
+
+## Checking Assumptions
+
+First, we need to check for the linearity of the relationship between the _log_ of the response variable and the explanatory variables
+```{r}
+# plot of Log of Satellites vs Carapace width
+gf_point(log(sat) ~ width,
+  data = crab,
+  xlab = "Width of Carapace (cm)",
+  ylab = "Log of Number of Satellites"
+)
+```
+
+We can observe the fit of the log-linear model with our transformed data, or our Poisson transformed model with our regular data.
+```{r}
+# plot of Log of Satellites vs Carapace width
+gf_point(log(sat) ~ width,
+  data = crab,
+  xlab = "Width of Carapace (cm)",
+  ylab = "Log of Number of Satellites") |> 
+  gf_coefline(model = crab_model)
+```
+
+If we want to observe the model with the untransformed response variable, we need to do a little bit of manipulation of the model results.
+```{r}
+gf_point(sat ~ width,
+  data = crab,
+  xlab = "Width of Carapace (cm)",
+  ylab = "Number of Satellites") |> 
+  gf_line(fitted.values(crab_model) ~ width)
+```
+
+In addition, we should check the Pearson adjusted residuals against the fitted values to determine if the constant variance assumption is satisfied.  We can see that the distribution of values is not equal, leading us to question constant variance assumption.
+```{r}
+gf_point(residuals(crab_model, type = "pearson") ~ log(fitted.values(crab_model)),
+         xlab = "Log Fitted Values",
+         ylab = "Pearson Residuals") |> 
+  gf_hline(yintercept = 0)
+```
+
+
+## Testing for Overdispersion
+We can test for overdispersion two ways.  Ultimately, we want our Poisson model to have _Residual Deviance_ equal to the _Residual Degrees of Freedom_, aka their ratio is one. Where do these values appear in the `summary()` output for the model?
+
+```{r}
+crab_model$deviance
+crab_model$df.residual
+crab_model$deviance / crab_model$df.residual
+```
+
+We can also conduct a hypothesis test:  
+$H_0:$ Residual Deviance = Degrees of Freedom  
+$H_1:$ Residual Deviance $\neq$ Degrees of Freedom
+
+```{r}
+1 - pchisq(crab_model$deviance, crab_model$df.residual)
+```
+
+Here we see that the model is definitely overdispersed.
+
+## Adjusting for Overdispersion
+To adjust for overdispersion, there are several options, but we will focus the use of a quasipoisson model which adjusts the dispersion by the necessary scale to make expected value and variance equivalent.
+
+```{r}
+model_disp <- glm(sat ~ width, data = crab, family = quasipoisson(link = log))
+summary(model_disp)
+```
+
+
+```{r}
+# residual vs fitted plot with overdispersion
+gf_point(residuals(model_disp, type = "pearson") ~ log(fitted.values(model_disp)),
+         xlab = "Log Fitted Values for QuasiPoisson",
+         ylab = "Pearson Residuals") |> 
+  gf_hline(yintercept = 0)
+```
+
+```{r}
+# new fitted model accounting for overdispersion
+gf_point(sat ~ width,
+  data = crab,
+  xlab = "Width of Carapace (cm)",
+  ylab = "Number of Satellites") |> 
+  gf_line(fitted.values(model_disp) ~ width)
+```

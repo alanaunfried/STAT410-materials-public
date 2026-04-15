@@ -1,0 +1,170 @@
+---
+title: "Notes 08: Multiple Poisson Regression and Rates"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+#| echo: false
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+
+# standard packages
+library(mosaic)
+library(ggformula)
+library(janitor)
+```
+
+
+## Multiple Poisson Regression - Horseshoe Crabs
+
+### Read in Data
+
+```{r}
+crab <- read.table("crab.txt")
+```
+
+The data does not come with column names so we will make the column.
+```{r}
+colnames(crab) <- c("obs", "color", "spine", "width", "weight", "sat")
+
+str(crab)
+head(crab)
+```
+
+
+### Multiple Poisson Model
+
+It is possible that the overdispersion issue is related to a need to include more variables in our model.  Let's consider the inclusion of "color" into the model.  Color is a categorical variable with four levels.  Therefore, we need to set the baseline.  We will use color 4 (dark) as our baseline:
+
+```{r}
+# create a new dataset where we change reference levels
+crab_ref <- crab |>
+  # change color to categorical, and make reference level dark (the fourth level)
+  mutate(color = factor(color, levels = c("4", "1", "2", "3"))) |>
+  # rename the category levels to something more memorable
+  mutate(color = recode_factor(color, "4" = "dark", "1" = "lightmed", "2" = "med", "3" = "darkmed"))
+```
+
+Now we can build our model with Color and Width:
+```{r}
+model_cw <- glm(sat ~ width + color, family = poisson(link = log), data = crab_ref)
+summary(model_cw)
+```
+
+Let's check for overdispersion:
+```{r}
+model_cw$deviance / model_cw$df.residual
+1 - pchisq(model_cw$deviance, model_cw$df.residual)
+```
+
+Our model appears to be overdispersed, so let's fit our model using the quasipoisson model.
+```{r}
+model_cw_disp <- glm(sat ~ width + color, family = quasipoisson(link = log), data = crab_ref)
+summary(model_cw_disp)
+summary(model_cw_disp)$dispersion
+```
+
+Though color is a single variable, we treat it as three dummy variables.  Therefore, to test it specifically, we want to perform a Likelihood Ratio Test/Drop-in-Deviance Test.  
+$H_0: \beta_{c1}=\beta_{c2}=\beta_{c3}=0$  
+$H_1:$ at least one $\beta_{ci} \neq 0$
+
+As a reminder, we need the output from the model with just width and no color as a predictor. 
+```{r}
+model_disp <- glm(sat ~ width, data = crab_ref, family = quasipoisson(link = log))
+summary(model_disp)
+```
+
+Conduct the drop in deviance test.
+```{r}
+anova(model_disp, model_cw_disp, test = "Chisq")
+```
+What did we find out?
+
+
+
+Finally, we can add in the other variables to the model:
+```{r}
+mod_full <- glm(sat ~ width + weight, family = quasipoisson(link = log), data = crab_ref)
+summary(mod_full)
+```
+
+Why are none of the variables significant?  We still need to check for multicollinearity!
+
+```{r}
+# scatterplot of weight vs width
+gf_point(width ~ weight,
+  data = crab_ref,
+  xlab = "Weight",
+  ylab = "Width"
+)
+
+# calculate VIF
+library(car)
+vif(mod_full)
+```
+
+
+
+## Modeling Rates instead of Counts
+
+### Credit Card Data
+
+Here we have data on credit card occurrences by income.  In order to fit the model, we need to create a column of the log(cases).
+```{r}
+credit_card <- read.csv("creditcard.csv")
+colnames(credit_card)
+
+credit_card <- credit_card |>
+  clean_names() |>
+  # creates new column for the log cases per count and income
+  mutate(l_cases = log(cases))
+
+head(credit_card)
+```
+Interpret the third line of data in the output.
+
+
+### Model for Rates
+
+Now let's fit our model.  Note that the summary output does NOT show anything about the offset, we just have our usual beta parameter estimates.
+```{r}
+log_fit <- glm(cr_cards ~ income + offset(l_cases), family = poisson, data = credit_card)
+summary(log_fit)
+```
+
+Here is an alternative way to write the offset statement:
+```{r}
+log_fit2 <- glm(cr_cards ~ income, offset = l_cases, family = poisson, data = credit_card)
+summary(log_fit2)
+```
+
+Interpret the slope in context:
+```{r}
+exp(coef(log_fit)[2])
+```
+
+What if we had fit the model without the offset?
+```{r}
+log_fit_no <- glm(cr_cards ~ income, family = poisson, data = credit_card)
+summary(log_fit_no)
+```
+
+
+What if we had not modeled based on rate but count?  First we would have to reorganize the data so that each row represents an individual instead of a group.  Is this the best way to model the data though? (Remember our data is grouped by income).
+```{r}
+# may need to install, allows us to use uncount()
+library(tidyr)
+# create new dataset with one row per individual
+ind_credit <- uncount(credit_card, weight = cases)
+
+# run model for counts
+count_mod <- glm(cr_cards ~ income, family = poisson, data = ind_credit)
+summary(count_mod)
+```
