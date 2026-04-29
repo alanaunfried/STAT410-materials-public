@@ -1,0 +1,116 @@
+---
+title: "Notes 10a: Decision Trees"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, comment = "", warning = FALSE, message = FALSE)
+
+# standard packages we use
+library(mosaic)
+library(ggformula)
+library(janitor)
+
+# for data cleaning
+library(tidyverse)
+
+# data from ISLR book
+library(ISLR2)
+
+# package for decision trees
+library(tree)
+
+```
+
+## Regression Trees for Baseball Data
+
+Suppose we want to predict `Salary` based on `Years` and `Hits` for baseball players. `Salary` is recorded in thousands of dollars; `Year`s is number of years the player has played in the major leagues, and `Hits` is the number of hits the player has made in the previous year.
+
+```{r}
+#  Read in the data
+
+data(Hitters)
+
+hitters <- Hitters |>
+  clean_names() |>    
+  select(salary, years, hits) |>
+  drop_na(salary) |>
+  mutate(log_salary = log(salary))
+
+head(hitters)
+str(hitters)  
+
+#fit the decision tree (regression tree)
+fit_reg_tree <- tree(log_salary ~ years + hits, data = hitters)
+fit_reg_tree
+
+#Graph the regression tree
+plot(fit_reg_tree)
+text(fit_reg_tree, pretty = 0) #pretty=0 just tells R to print factor names directly instead of giving them code letters
+
+#Prune the tree to 3 categories
+prune_salary <- prune.tree(fit_reg_tree, best = 3)
+plot(prune_salary)
+text(prune_salary, pretty = 0)
+
+
+```
+
+Keep in mind that we log transformed salary, so the predictions from the tree are on the log scale. To get predictions on the original scale, we need to exponentiate the final leaves to understand the predictions. Each of these values represents thousands of dollars. 
+
+```{r}
+#Exponentiate leaves
+exp(5.107)
+exp(5.998)
+exp(6.740)
+```
+
+## Other packages
+
+Note there are other packages that also fit decision trees, such as `rpart`. Used with the `partykit` package, it can make some nicer diagrams, but results do not perfectly match the `tree` package. Here is an examplew with the baseball data.
+
+```{r}
+library(rpart)
+library(partykit)
+fit <- rpart(log_salary ~ years + hits, 
+             data = hitters, 
+             control = rpart.control(maxdepth = 2))
+plot(as.party(fit))
+```
+
+
+## Linear Model Approach
+
+Allowing for an interaction term between years and hits as well. 
+
+```{r}
+
+#exploratory analysis
+gf_histogram(~salary, data = hitters)
+#log transform
+gf_histogram(~log_salary, data = hitters)
+
+#scatterplots of salary by x variables
+gf_point(log_salary ~ years, data = hitters)
+gf_point(log_salary ~ hits, data = hitters)
+
+salary_model <- lm(log_salary ~ years + hits + years*hits, data = hitters)
+summary(salary_model)
+
+#check assumptions
+plot(salary_model, 1) #resids vs fitted
+plot(salary_model, 2) #qq
+plot(salary_model, 5) #cooks distance
+
+#log-linear model so to get predictions on the original scale, we need to exponentiate the predictions from the model
+exp(coef(salary_model))
+```
+
