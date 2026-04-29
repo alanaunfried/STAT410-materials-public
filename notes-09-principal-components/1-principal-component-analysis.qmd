@@ -1,0 +1,284 @@
+---
+title: "Notes 09: Principal Component Analysis"
+format:
+  html:
+    embed-resources: true
+execute: 
+  warning: false
+  echo: true
+  error: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+#| echo: false
+knitr::opts_chunk$set(echo = TRUE, comment = "")
+
+#data cleaning
+library(tidyverse)
+```
+
+
+## Principal Component Analysis
+Before we get started, let's explore the data.
+
+```{r}
+places_orig <- read.csv("Places.csv") |> janitor::clean_names()
+head(places_orig)
+```
+
+Graphs and summary statistics
+
+```{r}
+#| message: false
+#| warning: false
+#| fig-width: 10
+#| fig-height: 15
+
+places_orig |>
+  select(climate, housing_cost, hlth_care, crime, transp, educ, arts, recreat, econ) |>
+  GGally::ggpairs() 
+```
+
+
+You might notice the scale of the variables is really different, so we might log transform our variables.  We are only going to focus on 9 of the variables, which correspond to columns 2 through 10 (2:10)
+
+```{r}
+#| message: false
+#| warning: false
+#| fig-width: 10
+#| fig-height: 15
+
+#log transform the variables
+places_log <- log10(places_orig[, 2:10])
+
+places_log |>
+  select(climate, housing_cost, hlth_care, crime, transp, educ, arts, recreat, econ) |>
+  GGally::ggpairs() 
+```
+
+We can calculate the variance of each variable this way.
+```{r}
+places_log |> 
+  summarize(across(1:9, var))
+```
+
+
+Here is the covariance matrix, correlation matrix, and variances for the variables.
+```{r}
+#correlation matrix
+places_log |>
+  corrr::correlate()  |> #correlation
+  corrr::rearrange() #Re-arrange a correlation data frame to group highly correlated variables closer together.
+
+#covariance matrix
+places_log |> 
+  cov()  # covariance matrix
+
+# variances are extracted from the diagonal of the covariance matrix
+places_log |> 
+  cov() |> 
+  diag() # variances
+
+```
+
+
+## Total variance for all 9 variables
+Ultimately what we will be doing for PCA is to determine components that explain some of the variance in our data.  To calculate the proportion of variance accounted for by a single PC, we will need to determine the total variance of our data, which just happens to be the sum of all variances! See how this value matches the output from PCA total variance.
+
+```{r}
+places_log |> 
+  cov() |> 
+  diag() |> 
+  sum() |> 
+  round(4)
+```
+
+## Fitting the PCs
+There are several base R options for computing PCs, including `prcomp` and `princomp`.  We will focus on `princomp` here, but the ISLR book has more information on `prcomp`.  
+
+```{r}
+# cleaner code for when your data is just the columns you want. place_log only includes the 9 variables we are conducting PCA with, so we don't need to specify any variables in particular
+fit <- princomp(~., data = places_log, cor = F, scores = T) 
+
+# this code does the same thing as above
+fit <- princomp(places_log, cor = F, scores = T) 
+fit
+summary(fit)
+```
+
+
+
+## Eigenvalues and Variances
+Notice that the eigenvalues of the covariance matrix are the variances of the PCs, or the standard deviations squared and sum to the total variance.
+```{r}
+(eig_val <- fit$sdev^2) # PC standard deviations squared, or variance
+sum(eig_val) # sum of PC variances
+eigen(cov(places_log))$values # eigenvalues of the covariance matrix
+sum(eigen(cov(places_log))$values) # sum of eigen values
+```
+
+## Eigenvectors and Loadings
+In addition, the eigenvectors are the same as the loadings for the PCs.  Recall that we can transform the loadings by multiplying all loadings by -1 and it will provide the same results and interpretations.
+```{r}
+eigen(cov(places_log))$vectors
+print(fit$loadings, cutoff = 0)
+```
+
+
+## Visualizing PCs
+We have two options for visualizing our PCs.  One is the Scree plot, used to make decisions about dimension reduction, and the other is the biplot, used to explore the data further.
+
+Here is the scree plot:
+```{r}
+screeplot(fit, type = "lines", main = "Community Characteristics")
+```
+
+
+## PC Scores (fits) and Regression
+We can extract the calculated PC values for each observation in our data by extracting `$scores`.  We can further specify which PCs we want by indicating specific column numbers.
+
+```{r}
+#| eval: false
+fit$scores[, 1] # PC 1
+fit$scores[, 3:4] # PCs 3 and 4
+```
+
+If we just want the first 25 rows of the PCs 1:5, here they are:
+
+```{r}
+fit$scores[1:25, 1:5]
+```
+
+
+##Correlations between Variables and PCs
+We can examine the correlations with certain PCs to measure the influence of a variable on each PC.
+
+```{r}
+cor(places_log$climate, fit$scores[, 1]) # just for climate
+cor(places_log, fit$scores[, 1:5]) # correlations for all variables in places and PCs 1:5
+```
+
+
+## Standardized Variables
+In many situations, we will want to standardize the variables of interest to account for different units of measurement and magnitudes that can unduly influnece the PC construction.  This is simple, we can do this by setting `cor=TRUE` in our `princomp` function. 
+
+
+```{r}
+fit_corr <- princomp(places_log, cor = T, scores = T)
+fit_corr
+summary(fit_corr)
+
+#default print is to suppress loadings close to 0
+print(fit_corr$loadings)
+#print the loadings, showing all values
+print(fit_corr$loadings, cutoff = 0)
+
+
+screeplot(fit_corr, type = "lines", main = "Community Characteristics")
+
+
+biplot(fit_corr)
+abline(h = 0)
+abline(v = 0)
+```
+
+Note: it doesn't matter if you calculate the correlation between the standardized or unstandardized variable and the PC based on standardized variables because correaltion is unitless.
+```{r}
+cor(scale(places_log$climate), fit_corr$scores)
+cor((places_log$arts), fit_corr$scores[,1])
+```
+
+The eigenvalues and eigenvectors now correspond to the **correlation** matrix and not the covariance matrix
+
+```{r}
+(eig_val <- fit_corr$sdev^2) # PC standard deviations squared, or variance
+sum(eig_val) # sum of PC variances
+eigen(cor(places_log))$values # eigenvalues of the covariance matrix
+sum(eigen(cor(places_log))$values) # sum of eigen values
+eigen(cor(places_log))$vectors
+print(fit_corr$loadings, cutoff = 0)
+```
+
+
+One more note: correlation between vars and PCs is [loadings/eigenvalues * sqrt(eigenvalue)]
+```{r}
+cor((places_log), (fit_corr$scores[, 1:5]))
+-eigen(cor(places_log))$vectors[, 1:5] * sqrt(eigen(cor(places_log))$values[1:5])
+```
+
+
+
+## Regression and PCA
+```{r}
+cars <- read.csv("Cars.csv")
+summary(cars)
+```
+
+For the Cars data, we want to predict a car’s price based on its other characteristics. Let’s look at basic linear regression for this situation. 
+
+```{r}
+library(car)
+model <- lm(LnPrice ~ Mileage + Cyl + Liter + factor(Buick) + factor(Cadillac) + factor(Chevrolet) + factor(Pontiac) + factor(SAAB), data = cars)
+summary(model)
+vif(model)
+```
+
+We can construct PCs just for the collinear variables
+```{r}
+fit_car <- princomp(cbind(cars$Cyl, cars$Liter), cor = T, scores = T)
+summary(fit_car)
+fit_car$loadings
+```
+
+We can incorporate just the first PC in our model, retaining all information from our two variables but without the collinearity issue.
+
+```{r}
+model_pca <- lm(LnPrice ~ Mileage + fit_car$scores[, 1] + factor(Buick) + factor(Cadillac) + factor(Chevrolet) + factor(Pontiac) + factor(SAAB), data = cars)
+summary(model_pca)
+vif(model_pca)
+```
+
+Collinearity is no longer an issue!
+
+
+
+
+
+## Standardizing variables - Example Simulation
+
+```{r}
+a <- rnorm(100, 5, 2)
+b <- rnorm(100, 100, 2)
+c <- rnorm(100, 500, 40)
+
+
+
+center_a <- a - mean(a)
+center_b <- b- mean(b)
+center_c <- c - mean(c)
+
+st_a <- (a - mean(a))/sd(a)
+st_b <- (b - mean(b))/sd(b)
+mean(st_a)
+
+var(st_a)
+var(st_b)
+var(center_c)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
