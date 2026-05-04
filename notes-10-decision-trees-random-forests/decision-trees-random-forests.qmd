@@ -1,5 +1,5 @@
 ---
-title: "Notes 10a: Decision Trees"
+title: "Notes 10: Decision Trees and Random Forests"
 format:
   html:
     embed-resources: true
@@ -41,7 +41,7 @@ data(Hitters)
 
 hitters <- Hitters |>
   clean_names() |>    
-  select(salary, years, hits) |>
+  #select(salary, years, hits) |>
   drop_na(salary) |>
   mutate(log_salary = log(salary))
 
@@ -56,7 +56,7 @@ fit_reg_tree
 plot(fit_reg_tree)
 text(fit_reg_tree, pretty = 0) #pretty=0 just tells R to print factor names directly instead of giving them code letters
 
-#Prune the tree to 3 categories
+#Prune the tree to 3 terminal nodes
 prune_salary <- prune.tree(fit_reg_tree, best = 3)
 plot(prune_salary)
 text(prune_salary, pretty = 0)
@@ -114,3 +114,82 @@ plot(salary_model, 5) #cooks distance
 exp(coef(salary_model))
 ```
 
+## Cross-Validation and Pruning
+
+Normally when fitting a decision tree, it is best practice to train the model first and then use cross-validation for pruning, then fit to test data. 
+
+First we show a large regression tree with multiple predictors for log_salary.
+
+```{r, fig.width=6, fig.height=7}
+#fit the decision tree (regression tree)
+hitters_nosal <- hitters |>
+  select(log_salary, years, rbi, put_outs, hits, walks, runs)
+
+#split the data into training and testing (just 50/50)
+set.seed(410)
+train <- sample(1:nrow(hitters_nosal), nrow(hitters_nosal)/2)
+#hitters_test will be used later for the random forest
+hitters_test <- hitters_nosal[-train, "log_salary"]
+
+#fit a regression tree on the training data. Results will not perfectly match the reading because we randomly split the data in a different way!
+fit_reg_tree_large <- tree(log_salary ~ ., data = hitters_nosal, subset = train)
+fit_reg_tree_large
+
+#Graph the regression tree
+plot(fit_reg_tree_large)
+text(fit_reg_tree_large, pretty = 0) 
+```
+
+Cross-validation for pruning: We will still use the baseball data.
+```{r}
+cv_hitters <- cv.tree(fit_reg_tree_large)
+
+#smallest deviance is desirable: size 7 means 7 terminal nodes are suggested from this analysis.
+cv_hitters
+
+plot(cv_hitters$size, cv_hitters$dev, type = "b")
+
+#now prune to 7 terminal nodes
+prune_hitters <- prune.tree(fit_reg_tree_large, best = 7)
+plot(prune_hitters)
+text(prune_hitters, pretty = 0)
+
+```
+
+## Random Forest Model
+
+### Fit the Model
+
+```{r}
+library(randomForest)
+
+set.seed(411)
+
+#the "." in the model below says to consider all possible predictors in the model, rather than specifying predictors to use
+#mtry should be about the square root of the number of predictors. here we have 6 predictors; we will consider 3 for each model
+rf_hitters <- randomForest(log_salary ~ ., mtry = 3, data = hitters_nosal, subset = train, importance = TRUE, na.action = na.omit)
+rf_hitters
+```
+
+### Predictions from Random Forest
+
+Now we predict with the test data
+```{r}
+
+#yh_rf is the predicted log salary from each player. How could we get predicted salaries?
+yhat_rf <- predict(rf_hitters, newdata = hitters_nosal[-train, ]) 
+
+exp(yhat_rf)
+
+#calculate SSE
+mean((yhat_rf - hitters_test)^2)
+
+```
+
+### Variable Importance
+
+```{r}
+importance(rf_hitters)
+varImpPlot(rf_hitters)
+
+```
